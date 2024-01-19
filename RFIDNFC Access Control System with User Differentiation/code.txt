@@ -1,0 +1,130 @@
+import RPi.GPIO as GPIO
+import time
+from mfrc522 import SimpleMFRC522
+import BlynkLib
+from BlynkTimer import BlynkTimer
+
+# Define Constants
+AUTHORIZED_CARDS = {
+    152900158326: ("Rahul", 5),
+    427472077813: ("Gaurav", 6),
+    152763515803: ("Bishal", 13),
+    978622562824: ("Rishikesh", 19),
+}
+
+EXIT_CARDS = {
+    635628044877: ("Exit", 4)
+}
+
+# Other Constants
+LED_PIN = 0
+LED_GREEN = 17
+RED_LED_DENIED = 27
+SERVO_PIN = 23
+BUZZER_PIN = 22
+
+LED_PINS = [5, 6, 13, 19]
+EXIT_LED = 4
+
+# Initialize Blynk
+BLYNK_AUTH_TOKEN = "X5Bho--zseF_Cc9h1OKzbr_FIlqiY_Ab"
+blynk = BlynkLib.Blynk(BLYNK_AUTH_TOKEN)
+
+# Create BlynkTimer Instance
+timer = BlynkTimer()
+
+# Function to sync the data from virtual pins
+@blynk.on("connected")
+def blynk_connected():
+    print("Hi, You have Connected to New Blynk2.0")
+    print(".......................................................")
+    time.sleep(0.5)
+
+def myData():
+    blynk.virtual_write(0, "Place Card: ")
+
+def handle_authorized_access(card_id):
+    user, led_pin = AUTHORIZED_CARDS[card_id]
+    print("Access granted!")
+    print("Welcome", user)
+    blynk.virtual_write(0, "ID: " + str(card_id))
+    blynk.virtual_write(1, "Welcome:" + str(user))
+
+    # Turn on the corresponding LED
+    GPIO.output(led_pin, GPIO.HIGH)
+    GPIO.output(LED_GREEN, GPIO.HIGH)
+    GPIO.output(BUZZER_PIN, GPIO.HIGH)
+
+    pwm.ChangeDutyCycle(2.5)
+    time.sleep(2)
+
+    pwm.ChangeDutyCycle(7.5)
+    blynk.virtual_write(1, " ")
+    time.sleep(2)
+
+    # Turn off the LED
+    GPIO.output(LED_GREEN, GPIO.LOW)
+    GPIO.output(BUZZER_PIN, GPIO.LOW)
+def handle_exit(card_id):
+    user, led_pin = EXIT_CARDS[card_id]
+    print("Exiting!")
+    blynk.virtual_write(0, "Exiting: ")
+    for led in LED_PINS:
+        GPIO.output(led, GPIO.LOW)
+    GPIO.output(EXIT_LED, GPIO.HIGH)
+    pwm.ChangeDutyCycle(2.5)
+    time.sleep(5)
+    pwm.ChangeDutyCycle(7.5)
+    time.sleep(0.5)
+    GPIO.output(EXIT_LED, GPIO.LOW)
+
+def handle_access_denied(card_id):
+    print("Access denied!")
+    blynk.virtual_write(0, "ID: " + str(card_id))
+    blynk.virtual_write(1, "Access Denied! ")
+    GPIO.output(RED_LED_DENIED, GPIO.HIGH)
+    GPIO.output(BUZZER_PIN, GPIO.HIGH)
+    time.sleep(0.2)
+    GPIO.output(RED_LED_DENIED, GPIO.LOW)
+    GPIO.output(BUZZER_PIN, GPIO.LOW)
+    time.sleep(0.2)
+    GPIO.output(RED_LED_DENIED, GPIO.HIGH)
+    GPIO.output(BUZZER_PIN, GPIO.HIGH)
+    time.sleep(0.5)
+    GPIO.output(RED_LED_DENIED, GPIO.LOW)
+    blynk.virtual_write(1, " ")
+
+# Set up GPIO
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(LED_PIN, GPIO.OUT)
+GPIO.setup(RED_LED_DENIED, GPIO.OUT)
+GPIO.setup(BUZZER_PIN, GPIO.OUT)
+GPIO.setup(SERVO_PIN, GPIO.OUT)
+GPIO.setup(LED_GREEN, GPIO.OUT)
+for led in LED_PINS:
+    GPIO.setup(led, GPIO.OUT)
+GPIO.setup(EXIT_LED, GPIO.OUT)
+# Create PWM object for the servo
+pwm = GPIO.PWM(SERVO_PIN, 50)
+pwm.start(0)
+reader = SimpleMFRC522()
+timer.set_interval(2, myData)
+
+if __name__ == "__main__":
+    try:
+        while True:
+            blynk.run()
+            timer.run()
+            id, text = reader.read()
+            print("Card ID:", id)
+            if id in AUTHORIZED_CARDS:
+                handle_authorized_access(id)
+            elif id in EXIT_CARDS:
+                handle_exit(id)
+            else:
+                handle_access_denied(id)
+
+    except KeyboardInterrupt:
+        print("Keyboard interrupt detected. Stopping the program.")
+        GPIO.cleanup()
+        pwm.stop() 
